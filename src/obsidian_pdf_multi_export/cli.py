@@ -33,16 +33,32 @@ def cli(debug):
 
 
 @cli.command()
-def sync():
+@click.option(
+    "--converter",
+    type=click.Choice(["pandoc", "typst"], case_sensitive=False),
+    default="pandoc",
+    show_default=True,
+    help="Choose the converter for Markdown to PDF.",
+)
+def sync(converter):
     """🔄 Synchronize configured directories."""
-    click.echo("⏳ Starting synchronization process...")
-    logger.info("Sync command initiated.")
+    click.echo(f"⏳ Starting synchronization process using {converter.capitalize()}...")
+    logger.info(f"Sync command initiated with converter: {converter}")
     try:
         mappings = config_manager.get_mappings()
-        pandoc_config = config_manager.get_pandoc_config()
-        synchronizer.run_sync(mappings, pandoc_config)
+        if converter == "pandoc":
+            converter_config = config_manager.get_pandoc_config()
+        elif converter == "typst":
+            converter_config = config_manager.get_typst_config()
+        else:
+             # Should not be reachable due to click.Choice
+             click.echo(f"❌ Internal Error: Invalid converter choice '{converter}'.", err=True)
+             logger.error(f"Invalid converter '{converter}' passed to sync function.")
+             return
+
+        synchronizer.run_sync(mappings, converter, converter_config)
         # Success message is now printed within run_sync
-        logger.info("Sync command completed successfully.")
+        logger.info(f"Sync command completed successfully using {converter}.")
     except Exception as e:
         # Catch any unexpected errors during the sync process setup or execution
         click.echo(f"❌ An unexpected error occurred during synchronization: {e}", err=True)
@@ -105,6 +121,12 @@ def list_mappings():
         click.echo(f"  Path: {pandoc_path or 'Not set (using default "pandoc")'}")
         click.echo(f"  Args: {pandoc_args or 'None'}")
 
+        typst_path, typst_args = config_manager.get_typst_config()
+        click.echo("\n🔧 Typst Configuration:")
+        click.echo(f"  Path: {typst_path or 'Not set (using default "typst")'}")
+        click.echo(f"  Args: {typst_args or 'None'}")
+
+
         logger.info("Config list command executed")
     except Exception as e:
         click.echo(f"❌ Error listing configuration: {e}", err=True)
@@ -142,6 +164,39 @@ def set_pandoc(pandoc_path_str, pandoc_args):
     except Exception as e:
         click.echo(f"❌ Error setting pandoc config: {e}", err=True)
         logger.error(f"Error during config set-pandoc: {e}")
+
+
+@config.command(name="set-typst")
+@click.option(
+    "--path",
+    "typst_path_str",
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+    help="Path to the typst executable.",
+)
+@click.option(
+    "--args",
+    "typst_args",
+    default=None,
+    help="Additional arguments for typst compile command (e.g., '--font-path /path/to/fonts'). Provide as a single string.",
+)
+def set_typst(typst_path_str, typst_args):
+    """🔧 Set the typst executable path and/or optional arguments."""
+    if typst_path_str is None and typst_args is None:
+        click.echo("⚠️ Please provide either --path or --args.", err=True)
+        return
+
+    typst_path = Path(typst_path_str) if typst_path_str else None
+
+    try:
+        config_manager.set_typst_config(path=typst_path, args=typst_args)
+        if typst_path:
+            click.echo(f"✅ Set typst path to: {typst_path}")
+        if typst_args is not None: # Check for None explicitly to allow setting empty args
+            click.echo(f"✅ Set typst arguments to: '{typst_args}'")
+        logger.info(f"Config set-typst command executed for path={typst_path}, args='{typst_args}'")
+    except Exception as e:
+        click.echo(f"❌ Error setting typst config: {e}", err=True)
+        logger.error(f"Error during config set-typst: {e}")
 
 
 if __name__ == "__main__":

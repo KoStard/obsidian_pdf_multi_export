@@ -22,5 +22,14 @@ The README should explain the problem it's solving, how to configure it, how it 
 
 Why I personally need this tool: I work on a project in Obsidian, there are some attachments (pdfs, images, etc), that themselves are valuable as well. I also have a number of markdown pages in Obsidian. These markdown pages is where the problem is. I want to share the project files with family and friends, but Markdown is not very easy format for non-tech audience to read. Instead, PDF is excellent option. Hence we'll use it. This is my personal use case, there might be others, so don't index on it in README.
 
+# Task 2 - Add Typst as an alternative converter (In Progress)
+
+## Requirements
+- Allow users to choose between Pandoc and Typst for Markdown-to-PDF conversion via a CLI option during sync (`--converter`).
+- Add configuration options for Typst (executable path, arguments) similar to Pandoc in `config.ini`.
+- Implement CLI commands (`config set-typst`, update `config list`) to manage Typst configuration.
+- Update the synchronizer logic to use the selected converter and its configuration.
+- Ensure appropriate error handling if the selected converter is not found or fails.
+
 # Future tasks
-- When the command is executed, it checks which files have changed since the last execution and runs the commands only for them, to save time.
+- When the command is executed, it checks which files have changed since the last execution and runs the commands only for them, to save time. # TODO: Task 3

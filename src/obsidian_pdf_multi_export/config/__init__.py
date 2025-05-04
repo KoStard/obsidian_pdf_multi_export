@@ -30,3 +30,13 @@ class ConfigManager(abc.ABC):
     def set_pandoc_config(self, path: Optional[Path] = None, args: Optional[str] = None) -> None:
         """Set the pandoc executable path and optional arguments."""
         pass
+
+    @abc.abstractmethod
+    def get_typst_config(self) -> Tuple[Optional[str], Optional[str]]:
+        """Get the configured typst path and arguments."""
+        pass
+
+    @abc.abstractmethod
+    def set_typst_config(self, path: Optional[Path] = None, args: Optional[str] = None) -> None:
+        """Set the typst executable path and optional arguments."""
+        pass

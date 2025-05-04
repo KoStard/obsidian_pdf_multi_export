@@ -17,6 +17,9 @@ MAPPINGS_JSON_KEY = "data"  # Key to store the JSON blob
 PANDOC_SECTION = "Pandoc"
 PANDOC_PATH_KEY = "path"
 PANDOC_ARGS_KEY = "args"
+TYPST_SECTION = "Typst"
+TYPST_PATH_KEY = "path"
+TYPST_ARGS_KEY = "args"
 
 
 class IniConfigManager(ConfigManager):
@@ -43,6 +46,10 @@ class IniConfigManager(ConfigManager):
                 self.config[PANDOC_SECTION] = {
                     PANDOC_PATH_KEY: "pandoc",  # Default to pandoc in PATH
                     PANDOC_ARGS_KEY: "",
+                }
+                self.config[TYPST_SECTION] = {
+                    TYPST_PATH_KEY: "typst", # Default to typst in PATH
+                    TYPST_ARGS_KEY: "",
                 }
                 with self.config_path.open("w") as configfile:
                     self.config.write(configfile)
@@ -155,6 +162,40 @@ class IniConfigManager(ConfigManager):
         if args is not None:
             self.config.set(PANDOC_SECTION, PANDOC_ARGS_KEY, args)
             logger.info(f"Set pandoc args to: '{args}'")
+
+        if path is not None or args is not None:
+            self._save_config()
+
+    def get_typst_config(self) -> Tuple[Optional[str], Optional[str]]:
+        """Get the configured typst path and arguments."""
+        path = None
+        args = None
+        if self.config.has_section(TYPST_SECTION):
+            path = self.config.get(TYPST_SECTION, TYPST_PATH_KEY, fallback="typst")
+            args = self.config.get(TYPST_SECTION, TYPST_ARGS_KEY, fallback="")
+        else:
+            # If section doesn't exist, ensure defaults are provided and section is created
+            path = "typst"
+            args = ""
+            self.config.add_section(TYPST_SECTION)
+            self.config.set(TYPST_SECTION, TYPST_PATH_KEY, path)
+            self.config.set(TYPST_SECTION, TYPST_ARGS_KEY, args)
+            self._save_config() # Save the newly added section
+        logger.debug(f"Retrieved typst config: path='{path}', args='{args}'")
+        return path, args
+
+    def set_typst_config(self, path: Optional[Path] = None, args: Optional[str] = None) -> None:
+        """Set the typst executable path and optional arguments."""
+        if not self.config.has_section(TYPST_SECTION):
+            self.config.add_section(TYPST_SECTION)
+
+        if path is not None:
+            path_str = str(path)
+            self.config.set(TYPST_SECTION, TYPST_PATH_KEY, path_str)
+            logger.info(f"Set typst path to: {path_str}")
+        if args is not None:
+            self.config.set(TYPST_SECTION, TYPST_ARGS_KEY, args)
+            logger.info(f"Set typst args to: '{args}'")
 
         if path is not None or args is not None:
             self._save_config()

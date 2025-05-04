@@ -6,9 +6,11 @@ import subprocess
 from pathlib import Path
 from typing import Dict, Tuple, Optional, Set
 
+from typing import Literal
+
 import click
 
-from . import Synchronizer
+from . import Synchronizer, ConverterChoice, ConverterConfig
 
 logger = logging.getLogger(__name__)
 
@@ -16,26 +18,32 @@ logger = logging.getLogger(__name__)
 class DirectorySynchronizer(Synchronizer):
     """Handles the synchronization logic between input and output directories."""
 
-    def run_sync(self, mappings: Dict[Path, Path], pandoc_config: Tuple[Optional[str], Optional[str]]) -> None:
-        """Runs the synchronization process for all configured mappings."""
+    def run_sync(
+        self,
+        mappings: Dict[Path, Path],
+        converter: ConverterChoice,
+        converter_config: ConverterConfig,
+    ) -> None:
+        """Runs the synchronization process for all configured mappings using the specified converter."""
         if not mappings:
             click.echo("⚠️ No directory mappings configured. Use 'config add' first.")
             logger.warning("Sync process skipped: No mappings found.")
             return
 
-        pandoc_path, pandoc_args_str = pandoc_config
-        pandoc_path = pandoc_path or "pandoc"  # Default to 'pandoc' if not set
-        pandoc_args = shlex.split(pandoc_args_str or "")
-        logger.debug(f"Using pandoc path: {pandoc_path}")
-        logger.debug(f"Using pandoc args: {pandoc_args}")
+        converter_path_str, converter_args_str = converter_config
+        converter_path = converter_path_str or converter # Default to 'pandoc' or 'typst' if path not set
+        converter_args = shlex.split(converter_args_str or "")
+        logger.info(f"Selected converter: {converter}")
+        logger.debug(f"Using {converter} path: {converter_path}")
+        logger.debug(f"Using {converter} args: {converter_args}")
 
-        # Check if pandoc exists
-        if not shutil.which(pandoc_path):
-            click.echo(f"❌ Error: Pandoc executable not found at '{pandoc_path}'.", err=True)
+        # Check if the selected converter exists
+        if not shutil.which(converter_path):
+            click.echo(f"❌ Error: {converter.capitalize()} executable not found at '{converter_path}'.", err=True)
             click.echo(
-                "Please install Pandoc or configure the correct path using 'config set-pandoc --path /path/to/pandoc'."
+                f"Please install {converter.capitalize()} or configure the correct path using 'config set-{converter} --path /path/to/{converter}'."
             )
-            logger.error(f"Pandoc executable not found at '{pandoc_path}'. Sync aborted.")
+            logger.error(f"{converter.capitalize()} executable not found at '{converter_path}'. Sync aborted.")
             return
 
         total_mappings = len(mappings)
@@ -54,8 +62,8 @@ class DirectorySynchronizer(Synchronizer):
                 # 1. Clean output directory (prompt for stale files)
                 self._clean_output_directory(input_dir, output_dir)
 
-                # 2. Process files: Copy non-markdown, convert markdown
-                self._process_directory(input_dir, output_dir, pandoc_path, pandoc_args)
+                # 2. Process files: Copy non-markdown, convert markdown using selected converter
+                self._process_directory(input_dir, output_dir, converter, converter_path, converter_args)
 
             except Exception as e:
                 click.echo(f"❌ Error processing mapping {input_dir} -> {output_dir}: {e}", err=True)
@@ -195,9 +203,16 @@ class DirectorySynchronizer(Synchronizer):
         click.echo(f"🧹 Cleanup finished for '{output_dir}'. Deleted: {deleted_count}, Skipped: {skipped_count}.")
         logger.info(f"Cleanup phase finished for {output_dir}. Deleted: {deleted_count}, Skipped: {skipped_count}.")
 
-    def _process_directory(self, input_dir: Path, output_dir: Path, pandoc_path: str, pandoc_args: list):
-        """Recursively processes files in the input directory."""
-        logger.info(f"Starting processing phase for: {input_dir} -> {output_dir}")
+    def _process_directory(
+        self,
+        input_dir: Path,
+        output_dir: Path,
+        converter: ConverterChoice,
+        converter_path: str,
+        converter_args: list,
+    ):
+        """Recursively processes files in the input directory using the selected converter."""
+        logger.info(f"Starting processing phase for: {input_dir} -> {output_dir} using {converter}")
         copied_count = 0
         converted_count = 0
         skipped_count = 0
@@ -223,10 +238,16 @@ class DirectorySynchronizer(Synchronizer):
                     output_file_path.parent.mkdir(parents=True, exist_ok=True)
 
                     if input_file_path.suffix.lower() == ".md":
-                        # Convert Markdown to PDF
-                        logger.debug(f"Converting '{input_file_path}' to '{output_file_path}'")
-                        click.echo(f"  📄 Converting: {relative_file_path} -> {relative_file_path.with_suffix('.pdf')}")
-                        self._convert_markdown(input_file_path, output_file_path, pandoc_path, pandoc_args)
+                        # Convert Markdown to PDF using the selected converter
+                        logger.debug(f"Attempting conversion of '{input_file_path}' to '{output_file_path}' using {converter}")
+                        click.echo(f"  📄 Converting ({converter}): {relative_file_path} -> {relative_file_path.with_suffix('.pdf')}")
+                        if converter == "pandoc":
+                            self._convert_markdown_pandoc(input_file_path, output_file_path, converter_path, converter_args)
+                        elif converter == "typst":
+                            self._convert_markdown_typst(input_file_path, output_file_path, converter_path, converter_args)
+                        else:
+                            # Should not happen due to CLI choices, but good practice
+                            raise ValueError(f"Unsupported converter type: {converter}")
                         converted_count += 1
                     else:
                         # Copy other files
@@ -235,11 +256,13 @@ class DirectorySynchronizer(Synchronizer):
                         shutil.copy2(input_file_path, output_file_path)  # copy2 preserves metadata
                         copied_count += 1
                 except subprocess.CalledProcessError as e:
-                    click.echo(f"  ❌ Pandoc Error converting {relative_file_path}: {e.stderr or e}", err=True)
-                    logger.error(f"Pandoc error converting {input_file_path}: {e.stderr or e}")
+                    # Provide more context in the error message
+                    stderr_output = e.stderr.strip() if e.stderr else str(e)
+                    click.echo(f"  ❌ {converter.capitalize()} Error converting {relative_file_path}: {stderr_output}", err=True)
+                    logger.error(f"{converter.capitalize()} error converting {input_file_path}: {stderr_output}")
                     error_count += 1
                 except Exception as e:
-                    click.echo(f"  ❌ Error processing file {relative_file_path}: {e}", err=True)
+                    click.echo(f"  ❌ Error processing file {relative_file_path} with {converter}: {e}", err=True)
                     logger.exception(f"Error processing file {input_file_path}:")
                     error_count += 1
 
@@ -247,30 +270,54 @@ class DirectorySynchronizer(Synchronizer):
             f"✨ Processing finished for '{input_dir}'. Converted: {converted_count}, Copied: {copied_count}, Errors: {error_count}."
         )
         logger.info(
-            f"Processing phase finished for {input_dir}. Converted: {converted_count}, Copied: {copied_count}, Errors: {error_count}."
+            f"Processing phase finished for {input_dir} using {converter}. Converted: {converted_count}, Copied: {copied_count}, Errors: {error_count}."
         )
 
-    def _convert_markdown(self, input_file: Path, output_file: Path, pandoc_path: str, pandoc_args: list):
-        """Converts a single markdown file to PDF using Pandoc."""
-        command = [pandoc_path, *pandoc_args, "-i", str(input_file), "-o", str(output_file)]
-        logger.debug(f"Executing Pandoc command: {' '.join(command)}")
+    def _run_conversion_command(self, command: list, input_file: Path, converter_name: str):
+        """Executes a conversion command and handles common errors."""
+        logger.debug(f"Executing {converter_name} command: {' '.join(shlex.quote(str(c)) for c in command)}")
         try:
             # Using check=True raises CalledProcessError on non-zero exit code
-            # Capture stderr to show pandoc errors
-            result = subprocess.run(command, check=True, capture_output=True, text=True, encoding="utf-8")
+            # Capture output, ensure UTF-8 decoding
+            result = subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace", # Handle potential decoding errors
+            )
+            # Log warnings even if successful
             if result.stderr:
-                # Log Pandoc warnings even if successful
-                logger.warning(f"Pandoc stderr for {input_file}:\n{result.stderr}")
-        except FileNotFoundError:
-            # This should ideally be caught earlier by the check in run_sync
-            logger.error(f"Pandoc executable not found at '{pandoc_path}' when trying to convert {input_file}")
-            raise  # Re-raise to be caught by the caller
+                logger.warning(f"{converter_name} stderr for {input_file}:\n{result.stderr.strip()}")
+            if result.stdout: # Also log stdout for potential info/warnings
+                 logger.info(f"{converter_name} stdout for {input_file}:\n{result.stdout.strip()}")
+
+        except FileNotFoundError as e:
+            # This check should ideally be caught earlier in run_sync, but catch here as a fallback
+            logger.error(f"{converter_name} executable not found at '{command[0]}' when trying to convert {input_file}")
+            # Re-raise with a more specific message if possible
+            raise FileNotFoundError(f"{converter_name} executable not found at '{command[0]}'. Please check installation and configuration.") from e
         except subprocess.CalledProcessError as e:
-            # Log the error and stderr, then re-raise to be handled in _process_directory
-            logger.error(f"Pandoc failed for {input_file}. Return code: {e.returncode}")
-            logger.error(f"Pandoc stderr:\n{e.stderr}")
-            logger.error(f"Pandoc stdout:\n{e.stdout}")  # Sometimes useful info is here too
-            raise e  # Re-raise the original exception
+            # Log details before re-raising
+            logger.error(f"{converter_name} failed for {input_file}. Return code: {e.returncode}")
+            logger.error(f"{converter_name} stderr:\n{e.stderr.strip()}")
+            logger.error(f"{converter_name} stdout:\n{e.stdout.strip()}")
+            raise e # Re-raise the original exception to be handled by the caller (_process_directory)
         except Exception as e:
-            logger.exception(f"Unexpected error during Pandoc conversion for {input_file}:")
-            raise  # Re-raise unexpected errors
+            logger.exception(f"Unexpected error during {converter_name} conversion for {input_file}:")
+            raise # Re-raise unexpected errors
+
+    def _convert_markdown_pandoc(self, input_file: Path, output_file: Path, pandoc_path: str, pandoc_args: list):
+        """Converts a single markdown file to PDF using Pandoc."""
+        command = [pandoc_path, *pandoc_args, "-i", str(input_file), "-o", str(output_file)]
+        self._run_conversion_command(command, input_file, "Pandoc")
+
+    def _convert_markdown_typst(self, input_file: Path, output_file: Path, typst_path: str, typst_args: list):
+        """Converts a single markdown file to PDF using Typst."""
+        # Typst command structure: typst compile [options] <input> [output]
+        # We place args *before* the input/output files.
+        command = [typst_path, "compile", *typst_args, str(input_file), str(output_file)]
+        # Note: Typst's direct markdown support might need specific setup or packages.
+        # This assumes a basic `typst compile file.md file.pdf` works.
+        self._run_conversion_command(command, input_file, "Typst")
