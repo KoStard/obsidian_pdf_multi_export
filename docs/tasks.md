@@ -1,4 +1,4 @@
-# Task 1 - Implement MLP of the project
+# Task 1 - Implement MLP of the project (Completed)
 
 ## Requirements
 
