@@ -3,6 +3,8 @@ import os
 import shlex
 import shutil
 import subprocess
+import tempfile
+import uuid
 from pathlib import Path
 from typing import Dict, Tuple, Optional, Set
 
@@ -314,8 +316,55 @@ class DirectorySynchronizer(Synchronizer):
         self._run_conversion_command(command, input_file, "Pandoc")
 
     def _convert_markdown_typst(self, input_file: Path, output_file: Path, typst_path: str, typst_args: list):
-        """Converts a single markdown file to PDF using Typst."""
-        # Typst command structure: typst compile [options] <input> [output]
-        # We place args *before* the input/output files.
-        command = [typst_path, "compile", *typst_args, str(input_file), str(output_file)]
-        self._run_conversion_command(command, input_file, "Typst")
+        """
+        Converts a single markdown file to PDF using Typst.
+        First converts Markdown to Typst format using Pandoc, then compiles with Typst.
+        """
+        # Check if pandoc is available in PATH as we need it for the conversion
+        pandoc_path = shutil.which("pandoc")
+        if not pandoc_path:
+            raise FileNotFoundError("Pandoc executable not found in PATH. Pandoc is required for Typst conversion.")
+        
+        logger.debug(f"Using pandoc from: {pandoc_path} to convert MD to Typst format")
+        
+        # Create a unique temporary directory for intermediate files
+        temp_dir = Path(tempfile.gettempdir()) / f"obsidian_pdf_export_{uuid.uuid4()}"
+        temp_dir.mkdir(exist_ok=True)
+        temp_typst_file = temp_dir / f"{input_file.stem}.typ"
+        
+        try:
+            # Step 1: Convert Markdown to Typst format using Pandoc
+            pandoc_command = [pandoc_path, "-t", "typst", str(input_file), "-o", str(temp_typst_file)]
+            logger.debug(f"Converting MD to Typst: {' '.join(shlex.quote(str(c)) for c in pandoc_command)}")
+            
+            subprocess.run(
+                pandoc_command,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            logger.debug(f"Successfully converted {input_file} to Typst format at {temp_typst_file}")
+            
+            # Step 2: Compile Typst to PDF
+            typst_command = [typst_path, "compile", *typst_args, str(temp_typst_file), str(output_file)]
+            logger.debug(f"Compiling Typst to PDF: {' '.join(shlex.quote(str(c)) for c in typst_command)}")
+            self._run_conversion_command(typst_command, input_file, "Typst")
+            
+        except subprocess.CalledProcessError as e:
+            if "pandoc" in e.cmd[0]:
+                logger.error(f"Pandoc failed to convert {input_file} to Typst format: {e}")
+                if e.stderr:
+                    logger.error(f"Pandoc stderr: {e.stderr.strip()}")
+                raise RuntimeError(f"Failed to convert Markdown to Typst format: {e.stderr.strip() if e.stderr else str(e)}") from e
+            raise
+        finally:
+            # Clean up temporary files
+            try:
+                if temp_typst_file.exists():
+                    temp_typst_file.unlink()
+                temp_dir.rmdir()
+                logger.debug(f"Cleaned up temporary directory {temp_dir}")
+            except OSError as e:
+                logger.warning(f"Failed to clean up temporary files: {e}")

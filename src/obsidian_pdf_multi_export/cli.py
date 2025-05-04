@@ -1,5 +1,6 @@
 import click
 import logging
+import shutil
 from pathlib import Path
 
 from pathlib import Path
@@ -38,7 +39,7 @@ def cli(debug):
     type=click.Choice(["pandoc", "typst"], case_sensitive=False),
     default="pandoc",
     show_default=True,
-    help="Choose the converter for Markdown to PDF.",
+    help="Choose the converter for Markdown to PDF. Note: Typst requires Pandoc to be installed.",
 )
 def sync(converter):
     """🔄 Synchronize configured directories."""
@@ -49,6 +50,12 @@ def sync(converter):
         if converter == "pandoc":
             converter_config = config_manager.get_pandoc_config()
         elif converter == "typst":
+            # Check if pandoc exists when typst is selected since we need it for conversion
+            if not shutil.which("pandoc"):
+                click.echo("❌ Error: Pandoc not found in PATH but is required for Typst conversion.", err=True)
+                click.echo("Please install Pandoc or configure it using 'config set-pandoc --path /path/to/pandoc'.")
+                logger.error("Pandoc executable not found but is required for Typst conversion.")
+                return
             converter_config = config_manager.get_typst_config()
         else:
              # Should not be reachable due to click.Choice
