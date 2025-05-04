@@ -3,7 +3,7 @@
 [![PyPI version](https://badge.fury.io/py/obsidian-pdf-multi-export.svg)](https://badge.fury.io/py/obsidian-pdf-multi-export)
 <!-- Add other badges as needed: build status, coverage, license -->
 
-A command-line tool to synchronize directories, specifically designed for Obsidian vaults, converting Markdown files to PDF using Pandoc while preserving the directory structure and copying other file types.
+A command-line tool to synchronize directories, specifically designed for Obsidian vaults, converting Markdown files to PDF using Pandoc or Typst while preserving the directory structure and copying other file types.
 
 ## Problem Solved
 
@@ -11,10 +11,10 @@ Obsidian is a fantastic tool for note-taking and personal knowledge management u
 
 It handles:
 
-- Converting `.md` files to `.pdf` using Pandoc.
+- Converting `.md` files to `.pdf` using either Pandoc or Typst (configurable).
 - Copying all other file types (images, attachments, etc.) as-is.
 - Maintaining the original directory structure in the output folder.
-- Configurable Pandoc command for customization (e.g., using specific templates or PDF engines).
+- Configurable converter commands (Pandoc/Typst) for customization (e.g., using specific templates, fonts, or engines).
 - Managing multiple input/output directory mappings.
 
 ## Installation

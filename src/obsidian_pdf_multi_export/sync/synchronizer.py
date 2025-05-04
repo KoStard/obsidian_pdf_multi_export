@@ -318,6 +318,4 @@ class DirectorySynchronizer(Synchronizer):
         # Typst command structure: typst compile [options] <input> [output]
         # We place args *before* the input/output files.
         command = [typst_path, "compile", *typst_args, str(input_file), str(output_file)]
-        # Note: Typst's direct markdown support might need specific setup or packages.
-        # This assumes a basic `typst compile file.md file.pdf` works.
         self._run_conversion_command(command, input_file, "Typst")
