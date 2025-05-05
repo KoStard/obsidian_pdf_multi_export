@@ -3,7 +3,7 @@
 [![PyPI version](https://badge.fury.io/py/obsidian-pdf-multi-export.svg)](https://badge.fury.io/py/obsidian-pdf-multi-export)
 <!-- Add other badges as needed: build status, coverage, license -->
 
-A command-line tool to synchronize directories, specifically designed for Obsidian vaults, converting Markdown files to PDF using Pandoc or Typst while preserving the directory structure and copying other file types.
+A command-line tool to synchronize directories, specifically designed for Obsidian vaults, converting Markdown files to PDF using Pandoc or Typst (via Pandoc) while preserving the directory structure and copying other file types.
 
 ## Problem Solved
 
@@ -11,7 +11,7 @@ Obsidian is a fantastic tool for note-taking and personal knowledge management u
 
 It handles:
 
-- Converting `.md` files to `.pdf` using either Pandoc or Typst (configurable).
+- Converting `.md` files to `.pdf` using either Pandoc or Typst (configurable). When using Typst, Pandoc is used as an intermediary to convert Markdown to Typst format.
 - Copying all other file types (images, attachments, etc.) as-is.
 - Maintaining the original directory structure in the output folder.
 - Configurable converter commands (Pandoc/Typst) for customization (e.g., using specific templates, fonts, or engines).
@@ -23,7 +23,9 @@ It handles:
 uv tool install git+https://github.com/KoStard/obsidian_pdf_multi_export
 ```
 
-Ensure you have [Pandoc](https://pandoc.org/installing.html) installed and accessible in your system's PATH, or configure the path using the tool.
+Ensure you have [Pandoc](https://pandoc.org/installing.html) installed and accessible in your system's PATH, or configure the path using the tool. Note that Pandoc is required even when using Typst as the converter, as it's used to convert Markdown to Typst format.
+
+If you plan to use Typst, ensure you have [Typst](https://typst.app/) installed as well.
 
 ## Usage
 
@@ -86,8 +88,17 @@ obsidian-pdf-multi-export config remove "/path/to/your/obsidian/vault/Project A"
 Once configured, run the synchronization process:
 
 ```bash
+# Use default (Pandoc) converter
 obsidian-pdf-multi-export sync
+
+# Or specify a converter
+obsidian-pdf-multi-export sync --converter pandoc
+obsidian-pdf-multi-export sync --converter typst
 ```
+
+When using Typst, the conversion process has two steps:
+1. Markdown is first converted to Typst format using Pandoc
+2. The resulting Typst file is then compiled to PDF using Typst
 
 This will:
 
@@ -103,7 +114,9 @@ This will:
 1. **Configuration Loading:** Reads mappings and Pandoc settings from `config.ini`.
 2. **Directory Traversal:** Walks through each configured input directory.
 3. **File Handling:**
-    - **Markdown (`.md`):** Constructs and executes a Pandoc command like `pandoc [configured args] -i <input.md> -o <output.pdf>`.
+    - **Markdown (`.md`):** 
+        - **Pandoc converter:** Constructs and executes a command like `pandoc [configured args] -i <input.md> -o <output.pdf>`.
+        - **Typst converter:** First converts Markdown to Typst format with `pandoc -t typst <input.md> -o <temp.typ>`, then compiles with `typst compile [configured args] <temp.typ> <output.pdf>`.
     - **Other Files:** Copies the file directly using `shutil.copy2` (preserving metadata).
 4. **Output Directory Management:** Creates necessary subdirectories in the output path. Handles cleanup of stale files (files in the output directory that no longer exist in the input directory) by prompting the user.
 
